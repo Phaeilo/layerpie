@@ -1,0 +1,103 @@
+#!/bin/sh
+
+is_root()
+{
+    if [ $(id -u) -ne 0 ] ; then
+        >&2 echo "must be root"
+        exit 1
+    fi
+}
+
+print_status()
+{
+    cat /proc/cmdline | grep " lpie" > /dev/null; A=$?
+    cat /proc/mounts | grep "overlay / " > /dev/null; B=$?
+    if [ $A -eq 0 -a $B -eq 0 ] ; then
+        >&2 echo "filesystem mode: overlayfs"
+    else
+        >&2 echo "filesystem mode: rw"
+    fi
+
+    cat /boot/cmdline.txt | grep " lpie" > /dev/null
+    if [ $? -eq 0 ] ; then
+        >&2 echo "cmdline.txt: lpie enabled"
+    else
+        >&2 echo "cmdline.txt: lpie disabled"
+    fi
+}
+
+change_cmdline()
+{
+    ENABLE=$1
+
+    # change possible?
+    cat /boot/cmdline.txt | grep " lpie" > /dev/null; X=$?
+    if [ $X -eq 0 -a $ENABLE -eq 1 ] ; then
+        >&2 echo "lpie already enabled"
+        exit 1
+    fi
+    if [ $X -ne 0 -a $ENABLE -eq 0 ] ; then
+        >&2 echo "lpie already disabled"
+        exit 1
+    fi
+
+    # remount /boot, if necessary
+    RO=0
+    cat /proc/mounts | grep /boot | grep "\sro[\s,]" > /dev/null
+    if [ $? -eq 0 ] ; then
+        mount -o remount,rw /boot
+        RO=1
+    fi
+
+    # update cmdline.txt
+    if [ $ENABLE -eq 2 ] ; then
+        # disable temporarily
+        sed -i 's/ lpie//g' /boot/cmdline.txt
+        sed -i 's/$/ tmp-rw-lpie/' /boot/cmdline.txt
+    fi
+    if [ $ENABLE -eq 1 ] ; then
+        # enable permanently
+        sed -i 's/$/ lpie/' /boot/cmdline.txt
+    fi
+    if [ $ENABLE -eq 0 ] ; then
+        # disable permanently
+        sed -i 's/ lpie//g' /boot/cmdline.txt
+    fi
+
+    # remount /boot, if necessary
+    if [ $RO -eq 1 ] ; then
+        mount -o remount,ro /boot
+    fi
+
+    if [ $ENABLE -eq 1 ] ; then
+        >&2 echo "lpie enabled"
+    fi
+    if [ $ENABLE -eq 0 ] ; then
+        >&2 echo "lpie disabled"
+    fi
+}
+
+CMD=$1
+case $CMD in
+    status)
+        print_status
+        ;;
+    enable)
+        is_root
+        change_cmdline 1
+        ;;
+    disable)
+        is_root
+        change_cmdline 0
+        ;;
+    reboot-rw)
+        is_root
+        change_cmdline 2
+        reboot
+        ;;
+    *)
+        >&2 echo "unknown command, try: status, enable, disable, reboot-rw"
+        exit 1
+        ;;
+esac
+

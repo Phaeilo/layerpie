@@ -1,0 +1,89 @@
+#!/bin/sh
+
+# layerpie: overlayfs for rpi
+
+# initramfs script prologue
+PREREQ=""
+prereqs()
+{
+    echo "${PREREQ}"
+}
+
+case "$1" in
+prereqs)
+    prereqs
+    exit 0
+    ;;
+esac
+
+. /scripts/functions
+
+
+# constants
+BASEDIR=/mnt/lpie
+TMPFS=$BASEDIR/rw
+UPPER=$TMPFS/upper
+WORK=$TMPFS/work
+LOWER=$BASEDIR/ro
+
+
+# utility functions
+chk_fail()
+{
+    if [ $1 -ne 0 ] ; then
+        panic "lpie: $2"
+        exit 0
+    fi
+}
+
+
+# check kernel cmdline if lpie is enabled
+ENABLED=0
+for CMD_PARAM in $(cat /proc/cmdline); do
+    case ${CMD_PARAM} in
+        lpie)
+            ENABLED=1
+            ;;
+    esac
+done
+if [ $ENABLED -eq 0 ]; then
+    exit 0
+fi
+
+# load driver
+modprobe overlay
+chk_fail $? "failed to load overlay driver"
+
+# mount ramdisk and create directories
+mkdir -p $TMPFS
+mount -t tmpfs tmpfs $TMPFS
+chk_fail $? "failed to mount tmpfs at $TMPFS"
+mkdir -p $UPPER
+mkdir -p $WORK
+
+# mount rootfs
+mkdir -p $LOWER
+mount -o move $rootmnt $LOWER
+chk_fail $? "failed to move rootfs from $rootmnt to $LOWER"
+
+# initiate overlay mount
+mount -t overlay -o lowerdir=$LOWER,upperdir=$UPPER,workdir=$WORK overlay $rootmnt
+chk_fail $? "failed to mount overlayfs at $rootmnt"
+
+# relocate mountpoints to rootmnt
+mkdir -p ${rootmnt}${LOWER}
+mount -o move $LOWER ${rootmnt}${LOWER}
+chk_fail $? "failed to relocate $LOWER ro $rootmnt"
+mkdir -p ${rootmnt}${TMPFS}
+mount -o move $TMPFS ${rootmnt}${TMPFS}
+chk_fail $? "failed to relocate $TMPFS to $rootmnt"
+
+# adjust fstab
+echo "# lpie fstab" > $rootmnt/etc/fstab
+echo "/dev/mmcblk0p1    /boot   vfat    ro  0   2" >> $rootmnt/etc/fstab
+echo "# raspian fstab (without / and /boot)" >> $rootmnt/etc/fstab
+GREP=$rootmnt/bin/grep
+cat ${rootmnt}${LOWER}/etc/fstab | $GREP -v " / " | $GREP -v " /boot " >> $rootmnt/etc/fstab
+
+log_success_msg "lpie: file systems ready"
+exit 0

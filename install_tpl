@@ -1,0 +1,48 @@
+#!/bin/sh
+
+# running on raspbian 9?
+cat /etc/os-release | grep 'ID=raspbian' > /dev/null; A=$?
+cat /etc/os-release | grep 'VERSION_ID="9"' > /dev/null; B=$?
+if [ $A -ne 0 -o $B -ne 0 ] ; then
+    >&2 echo "only Raspbian 9 is supported"
+    exit 1
+fi
+
+# running as root?
+if [ $(id -u) -ne 0 ] ; then
+    >&2 echo "must be root"
+    >&2 echo "try: curl ... | sudo sh"
+    exit 1
+fi
+
+INSTALLDIR=/opt/lpie
+
+mkdir -p $INSTALLDIR
+
+if [ -f $INSTALLDIR/version ] ; then
+    >&2 echo "lpie already installed"
+    exit 1
+fi
+
+echo 1 > $INSTALLDIR/version
+
+cat <<"EOF" | base64 -d | tar -xzf - -C $INSTALLDIR
+TAR_ARCHIVE_CONTENTS
+EOF
+
+chmod u=rw,og=r $INSTALLDIR/*
+chmod +x $INSTALLDIR/lpie
+chmod +x $INSTALLDIR/reboot-rw-svc
+chmod +x $INSTALLDIR/initscript
+ln -s $INSTALLDIR/lpie /usr/local/bin/lpie
+cp $INSTALLDIR/initscript /etc/initramfs-tools/scripts/init-bottom/lpie-init
+ln -s $INSTALLDIR/lpie.service /etc/systemd/system/lpie.service
+ln -s /etc/systemd/system/lpie.service /etc/systemd/system/multi-user.target.wants/lpie.service
+echo "overlay" >> /etc/initramfs-tools/modules
+echo "initramfs initramfs.img" >> /boot/config.txt
+mkinitramfs -o /boot/initramfs.img
+systemctl disable dphys-swapfile >/dev/null 2>&1
+
+echo "lpie successfully installed"
+echo "enable overlay mode with: sudo lpie enable"
+

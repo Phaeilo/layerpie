@@ -1,0 +1,9 @@
+[Unit]
+Description=lpie reboot-rw service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/lpie/reboot-rw-svc
+
+[Install]
+WantedBy=multi-user.target

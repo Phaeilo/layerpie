@@ -1,0 +1,10 @@
+#!/bin/sh
+
+X=$(
+    tar -czf - --owner=0 --group=0 \
+        initscript lpie lpie.service reboot-rw-svc \
+        | base64 -w 0
+)
+
+cat install_tpl | sed "s#TAR_ARCHIVE_CONTENTS#$X#" > installer
+
