@@ -1,10 +1,11 @@
 #!/bin/sh
 
-# running on raspbian 9?
+# running on raspbian 9 or 10?
 cat /etc/os-release | grep 'ID=raspbian' > /dev/null; A=$?
 cat /etc/os-release | grep 'VERSION_ID="9"' > /dev/null; B=$?
-if [ $A -ne 0 -o $B -ne 0 ] ; then
-    >&2 echo "only Raspbian 9 is supported"
+cat /etc/os-release | grep 'VERSION_ID="10"' > /dev/null; C=$?
+if [ $A -ne 0 -a $B -ne 0 -o $C -ne 0 ] ; then
+    >&2 echo "only Raspbian 9 and 10 is supported"
     exit 1
 fi
 
